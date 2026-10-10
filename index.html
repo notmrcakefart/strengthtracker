@@ -56,7 +56,9 @@ main{padding:14px 16px 110px;max-width:640px;margin:0 auto}
 .session-head{display:flex;justify-content:space-between;align-items:flex-end;margin:4px 0 12px}
 .session-head h2{font-family:var(--display);font-weight:800;font-size:34px;margin:0;line-height:1}
 .session-head h2 small{display:block;font-size:16px;font-weight:600;color:var(--muted);letter-spacing:.04em}
-.session-head .date{color:var(--muted);font-size:14px;text-align:right}
+.session-head .date{color:var(--muted);font-size:12px;text-align:right}
+.session-head .date input{display:block;margin-top:2px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:0 8px;font-family:var(--display);font-weight:700;font-size:16px;color:var(--text);color-scheme:dark}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .session-head .date input{color-scheme:light}}
 .deload{background:var(--warn);color:#fff;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-weight:500;font-size:14px}
 
 .ex{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden}
@@ -136,7 +138,7 @@ main{padding:14px 16px 110px;max-width:640px;margin:0 auto}
   <section class="view on" id="viewLog">
     <div class="session-head">
       <h2 id="sessionTitle">PUSH<small>Heavy</small></h2>
-      <div class="date" id="sessionDate"></div>
+      <label class="date">Logging as<br><input type="date" id="sessionDate" aria-label="Session date"></label>
     </div>
     <div class="deload" id="deloadBanner" hidden>Deload week: cut weight about 40%, every lift 3 sets of 8–10. Targets below are already switched.</div>
     <div id="exList"></div>
@@ -184,14 +186,14 @@ main{padding:14px 16px 110px;max-width:640px;margin:0 auto}
 <script>
 /* ---------- Program ---------- */
 const PROGRAM = {
-  mon:{label:"MON",name:"PUSH",sub:"Heavy",ex:[
+  mon:{label:"PUSH A",name:"PUSH",sub:"Heavy",ex:[
     {n:"Barbell Bench Press",s:4,r:[4,6],inc:5},
     {n:"Weighted Dips",s:3,r:[5,8],inc:5,bw:true},
     {n:"Overhead Press",s:3,r:[5,8],inc:5},
     {n:"Incline DB Press",s:3,r:[8,10],inc:5},
     {n:"Lateral Raise",s:3,r:[12,15],inc:2.5},
     {n:"Tricep Pushdown",s:2,r:[12,15],inc:5}]},
-  tue:{label:"TUE",name:"PULL",sub:"Heavy",ex:[
+  tue:{label:"PULL A",name:"PULL",sub:"Heavy",ex:[
     {n:"Weighted Pull-Ups",s:4,r:[4,6],inc:5,bw:true},
     {n:"Barbell Row",s:4,r:[5,8],inc:5},
     {n:"Chest-Supported Row",s:3,r:[8,10],inc:5},
@@ -199,21 +201,21 @@ const PROGRAM = {
     {n:"Face Pull",s:3,r:[12,15],inc:5},
     {n:"EZ-Bar Curl",s:3,r:[8,10],inc:5},
     {n:"Hammer Curl",s:2,r:[10,12],inc:2.5}]},
-  wed:{label:"WED",name:"LEGS",sub:"Squat + Deadlift",ex:[
+  wed:{label:"LEGS",name:"LEGS",sub:"Squat + Deadlift",ex:[
     {n:"Back Squat",s:4,r:[4,6],inc:5},
     {n:"Deadlift",s:3,r:[3,5],inc:10},
     {n:"Walking DB Lunges",s:3,r:[10,12],inc:5,side:true},
     {n:"Leg Extension",s:3,r:[12,15],inc:5},
     {n:"Single-Leg Hamstring Curl",s:3,r:[10,12],inc:5,side:true},
     {n:"Standing Calf Raise",s:4,r:[12,15],inc:5}]},
-  fri:{label:"FRI",name:"PUSH",sub:"Volume",ex:[
+  fri:{label:"PUSH B",name:"PUSH",sub:"Volume",ex:[
     {n:"Incline DB Press",s:4,r:[8,12],inc:5},
     {n:"Machine Chest Press",s:3,r:[10,12],inc:5},
     {n:"DB Shoulder Press",s:3,r:[8,12],inc:5},
     {n:"Cable Fly",s:2,r:[15,15],inc:5},
     {n:"Lateral Raise",s:4,r:[15,20],inc:2.5},
     {n:"Overhead Rope Extension",s:3,r:[12,15],inc:5}]},
-  sat:{label:"SAT",name:"PULL",sub:"Volume",ex:[
+  sat:{label:"PULL B",name:"PULL",sub:"Volume",ex:[
     {n:"Weighted Chin-Ups",s:4,r:[6,8],inc:5,bw:true},
     {n:"Cable Row",s:3,r:[10,12],inc:5},
     {n:"Lat Pulldown",s:3,r:[10,12],inc:5},
@@ -245,6 +247,7 @@ function weekNumber(){
   const a=new Date(meta.startDate), b=new Date(todayISO());
   return Math.floor((b-a)/(7*864e5))+1;
 }
+function weekNumberOn(iso){if(!meta.startDate)return null;return Math.floor((new Date(iso)-new Date(meta.startDate))/(7*864e5))+1}
 function isDeload(){return weekNumber()===DELOAD_WEEK}
 function targetFor(ex){ return isDeload()?{s:3,r:[8,10]}:{s:ex.s,r:ex.r}; }
 function renderWeek(){
@@ -253,17 +256,15 @@ function renderWeek(){
 }
 
 /* ---------- Day tabs ---------- */
-function todayKey(){const map=["sun","mon","tue","wed","thu","fri","sat"];return map[new Date().getDay()]}
-function defaultDay(){
-  const t=todayKey(); if(PROGRAM[t]) return t;
-  // off day: show the next training day
-  const order=["mon","tue","wed","thu","fri","sat","sun"];let i=order.indexOf(t);
-  for(let k=1;k<7;k++){const d=order[(i+k)%7];if(PROGRAM[d])return d}
-  return "mon";
+function nextDay(){
+  // whatever comes after the last logged workout in the rotation
+  const last=sessions[0]; if(!last||!PROGRAM[last.day]) return DAY_ORDER[0];
+  return DAY_ORDER[(DAY_ORDER.indexOf(last.day)+1)%DAY_ORDER.length];
 }
+function defaultDay(){return nextDay()}
 function renderTabs(){
-  const t=todayKey();
-  $("#dayTabs").innerHTML=DAY_ORDER.map(k=>`<button class="day${k===currentDay?" on":""}${k===t?" today":""}" data-day="${k}" role="tab" aria-selected="${k===currentDay}">${PROGRAM[k].label}<small>${PROGRAM[k].name.charAt(0)+PROGRAM[k].name.slice(1).toLowerCase()}</small></button>`).join("");
+  const t=nextDay();
+  $("#dayTabs").innerHTML=DAY_ORDER.map(k=>`<button class="day${k===currentDay?" on":""}${k===t?" today":""}" data-day="${k}" role="tab" aria-selected="${k===currentDay}" title="${k===t?"Up next":""}">${PROGRAM[k].label}<small>${PROGRAM[k].sub}</small></button>`).join("");
 }
 $("#dayTabs").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(!b)return;currentDay=b.dataset.day;renderTabs();renderLog()});
 
@@ -280,7 +281,7 @@ function readInputs(){
   });
   return out;
 }
-function saveDraft(){lsSet(draftKey(),{ex:readInputs(),notes:$("#notes").value})}
+function saveDraft(){lsSet(draftKey(),{ex:readInputs(),notes:$("#notes").value,date:$("#sessionDate").value})}
 
 /* ---------- Last-session lookup ---------- */
 function lastFor(name){
@@ -302,9 +303,9 @@ function suggest(ex,last){
 function renderLog(){
   const day=PROGRAM[currentDay];
   $("#sessionTitle").innerHTML=`${day.name}<small>${day.sub}</small>`;
-  $("#sessionDate").textContent=fmtDate(todayISO());
   $("#deloadBanner").hidden=!isDeload();
   const draft=lsGet(draftKey(),null);
+  $("#sessionDate").value=draft?.date||todayISO();
   $("#notes").value=draft?.notes||"";
   $("#exList").innerHTML=day.ex.map((ex,i)=>{
     const t=targetFor(ex), last=lastFor(ex.n), sug=suggest(ex,last);
@@ -344,22 +345,24 @@ $("#exList").addEventListener("click",e=>{
   saveDraft();updateFinish();
 });
 $("#notes").addEventListener("input",saveDraft);
+$("#sessionDate").addEventListener("change",saveDraft);
 function updateFinish(){$("#finishBtn").disabled=!readInputs().some(e=>e.sets.some(s=>s.r))}
 
 /* ---------- Finish ---------- */
 $("#finishBtn").addEventListener("click",async()=>{
   const ex=readInputs().map(e=>({n:e.n,sets:e.sets.filter(s=>s.r)})).filter(e=>e.sets.length);
   if(!ex.length) return;
-  const date=todayISO();
+  const date=/^\d{4}-\d{2}-\d{2}$/.test($("#sessionDate").value)?$("#sessionDate").value:todayISO();
   if(!meta.startDate){meta.startDate=mondayOf(date);await saveMeta()}
   const id=`${date}-${currentDay}-${Date.now().toString(36)}`;
-  const s={id,date,day:currentDay,week:weekNumber(),exercises:ex,notes:$("#notes").value.trim()};
+  const s={id,date,day:currentDay,week:weekNumberOn(date),exercises:ex,notes:$("#notes").value.trim()};
   sessions.unshift(s); sessions.sort((a,b)=>b.id.localeCompare(a.id));
   lsSet("sessions",sessions);
   try{ if(store.kind==="db") await store.col.doc(id).set(s); toast("Workout saved"); }
   catch(err){ toast("Saved on this phone only"); }
   localStorage.removeItem(draftKey());
-  renderWeek();renderLog();renderHistory();renderRecords();
+  currentDay=nextDay();
+  renderWeek();renderTabs();renderLog();renderHistory();renderRecords();
 });
 
 /* ---------- History ---------- */
@@ -444,7 +447,8 @@ $("#syncLabel").textContent="Saved on this phone";
     sessions=cloud.sort((a,b)=>b.id.localeCompare(a.id));
     lsSet("sessions",sessions);lsSet("meta",meta);
     $("#syncLabel").textContent="Synced to your account";
-    renderWeek();renderLog();renderHistory();renderRecords();
+    currentDay=nextDay();
+    renderWeek();renderTabs();renderLog();renderHistory();renderRecords();
   }catch(e){ /* stay local */ }
 })();
 </script>
